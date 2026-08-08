@@ -397,8 +397,8 @@
   </div>
   <div class="topbar-right">
     <div class="agent-field">
-      <label for="agentName">Agent</label>
-      <input id="agentName" type="text">
+      <label for="agentName">Alias</label>
+      <input id="agentName" type="text" oninput="onAliasChange()">
     </div>
     <div class="theme-toggle" id="themeToggleBtn" onclick="toggleTheme()" title="Toggle light / dark mode">🌙</div>
   </div>
@@ -1328,7 +1328,16 @@ document.querySelectorAll('.subtab-btn').forEach(btn=>{
 });
 
 /* ---------------- Helpers ---------------- */
-function agent(){ return document.getElementById('agentName').value || 'Alejandro'; }
+function agent(){ return document.getElementById('agentName').value || '[Alias]'; }
+function onAliasChange(){
+  // Live-refresh every result that includes the agent's alias in its descriptor
+  calcSports('reload');
+  calcSports('july');
+  calcSports('aff');
+  calcLotto('standard');
+  calcLotto('react');
+  calcMad();
+}
 function money(n){ return '$' + n.toFixed(2); }
 function setResult(prefix, ok, amountText, statusText, statusClass, descriptor){
   const amt = document.getElementById(prefix+'-amount');
