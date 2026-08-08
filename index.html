@@ -991,16 +991,44 @@
   <div class="view" id="view-cover">
     <div class="panel-title"><h2>🧾 Cover Payouts Checker</h2><span class="badge">Debt-chain reconciliation</span></div>
 
-    <div class="calc-card">
-      <div class="field">
-        <label>Transaction data — paste tab-separated rows (any order, auto-sorted by timestamp)</label>
-        <textarea id="cp-input" class="cp-textarea"></textarea>
+    <div class="subtabs">
+      <button class="subtab-btn active" data-sub="cp-transreporter">TransReporter</button>
+      <button class="subtab-btn" data-sub="cp-gbs">GBS</button>
+    </div>
+
+    <div class="subview active" id="sub-cp-transreporter">
+      <div class="calc-card">
+        <div class="field">
+          <label>Transaction data — paste tab-separated rows (any order, auto-sorted by timestamp)</label>
+          <textarea id="cp-input" class="cp-textarea"></textarea>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-gold" onclick="cpProcess()">▶ Run Analysis</button>
+          <button class="btn btn-ghost" onclick="cpClearAll()">✕ Clear</button>
+        </div>
+        <div id="cp-error" class="cp-error"></div>
       </div>
-      <div class="btn-row">
-        <button class="btn btn-gold" onclick="cpProcess()">▶ Run Analysis</button>
-        <button class="btn btn-ghost" onclick="cpClearAll()">✕ Clear</button>
+    </div>
+
+    <div class="subview" id="sub-cp-gbs">
+      <div class="calc-card">
+        <div class="rules">Paste each side from its own GBS grid export — Date, Doc #, Description, Credit, Debit, Balance. Leave the Balance column as-is; only the Credit or Debit amount is used for the calculation.</div>
+        <div class="row2">
+          <div class="field">
+            <label>Deposits</label>
+            <textarea id="cp-gbs-deposits" class="cp-textarea"></textarea>
+          </div>
+          <div class="field">
+            <label>Payouts</label>
+            <textarea id="cp-gbs-payouts" class="cp-textarea"></textarea>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-gold" onclick="cpProcessGBS()">▶ Run Analysis</button>
+          <button class="btn btn-ghost" onclick="cpClearAllGBS()">✕ Clear</button>
+        </div>
+        <div id="cp-gbs-error" class="cp-error"></div>
       </div>
-      <div id="cp-error" class="cp-error"></div>
     </div>
 
     <div id="cp-dashboard" style="display:none;">
@@ -1785,6 +1813,74 @@ function cpProcess(){
   }
   if(!dataRows.length){ errorEl.textContent='⚠️ Only a header row detected.'; errorEl.style.display='block'; return; }
 
+  cpRunEngine(dataRows);
+}
+
+/* ---- GBS: two separate Deposits / Payouts boxes, same result display ---- */
+function cpParseGBSLines(text){
+  return text.split('\n').map(l=>l.trim()).filter(l=>l).map(line=>{
+    let parts = line.split('\t');
+    if(parts.length < 4){
+      const alt = line.split(/\s{2,}/);
+      if(alt.length >= 4) parts = alt;
+    }
+    return parts;
+  }).filter(parts=>parts.length>=4);
+}
+function cpParseAmount(str){
+  if(str===undefined || str===null) return NaN;
+  const cleaned = String(str).replace(/,/g,'').trim();
+  if(cleaned==='') return NaN;
+  return parseFloat(cleaned);
+}
+function cpProcessGBS(){
+  const errorEl = document.getElementById('cp-gbs-error');
+  errorEl.style.display='none';
+  const depText = document.getElementById('cp-gbs-deposits').value.trim();
+  const payText = document.getElementById('cp-gbs-payouts').value.trim();
+  if(!depText && !payText){
+    errorEl.textContent='⚠️ Please paste at least one deposit or payout row.';
+    errorEl.style.display='block';
+    return;
+  }
+
+  const depLines = cpParseGBSLines(depText);
+  const payLines = cpParseGBSLines(payText);
+  const rows = [];
+
+  // Deposits box columns: Date | Doc# | Description | Credit | Debit | Balance
+  depLines.forEach(cols=>{
+    const credit = cpParseAmount(cols[3]);
+    if(isNaN(credit)) return;
+    rows.push([cols[1]||'', cols[0]||'', '', cols[2]||'', '', credit.toFixed(2), '', credit.toFixed(2)]);
+  });
+  // Payouts box columns: Date | Doc# | Description | Credit | Debit | Balance
+  payLines.forEach(cols=>{
+    const debit = cpParseAmount(cols[4]);
+    if(isNaN(debit)) return;
+    rows.push([cols[1]||'', cols[0]||'', '', cols[2]||'', '', '', debit.toFixed(2), (-debit).toFixed(2)]);
+  });
+
+  if(!rows.length){
+    errorEl.textContent='⚠️ No valid rows detected — check that each line has a date, doc #, description and an amount.';
+    errorEl.style.display='block';
+    return;
+  }
+
+  cpRunEngine(rows);
+}
+function cpClearAllGBS(){
+  document.getElementById('cp-gbs-deposits').value='';
+  document.getElementById('cp-gbs-payouts').value='';
+  document.getElementById('cp-gbs-error').style.display='none';
+  document.getElementById('cp-dashboard').style.display='none';
+  document.getElementById('cp-rc-output').value='';
+  document.getElementById('cp-rc-note').textContent='';
+  cpOutstandingDates=[]; cpOutstandingTotal=0;
+}
+
+/* ---- Shared engine: takes rows shaped [Doc, DateTime, TranType, Description, EnteredBy, Credit, Debit, Total] ---- */
+function cpRunEngine(dataRows){
   const dataLines = dataRows.map(r=>r.join('\t'));
   const COL_DATE=1;
   let rows=dataRows;
